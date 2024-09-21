@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Search Results Extractor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div id="root" class="container mx-auto p-4">
+        <h1 class="text-3xl font-bold mb-6">Google Search Results Extractor</h1>
+        <form id="searchForm" class="mb-6">
+            <div class="mb-4">
+                <label for="searchTerm" class="block text-sm font-medium text-gray-700">Google Search Terms (separate multiple queries with semicolons)</label>
+                <input type="text" id="searchTerm" name="searchTerm" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="query1; query2; query3">
+            </div>
+            <div class="mb-4">
+                <label for="limitResults" class="block text-sm font-medium text-gray-700">Limit Output Responses (Maximum number of results to return)</label>
+                <input type="number" id="limitResults" name="limitResults" min="1" max="100" value="5" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+            </div>
+            <div class="mb-4">
+                <label for="minDelay" class="block text-sm font-medium text-gray-700">Minimum Delay (seconds) (Minimum wait time between requests)</label>
+                <input type="number" id="minDelay" name="minDelay" min="1" max="60" value="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+            </div>
+            <div class="mb-4">
+                <label for="maxDelay" class="block text-sm font-medium text-gray-700">Maximum Delay (seconds) (Maximum wait time between requests)</label>
+                <input type="number" id="maxDelay" name="maxDelay" min="1" max="60" value="5" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+            </div>
+            <div class="mb-4">
+                <label for="timeout" class="block text-sm font-medium text-gray-700">Timeout (milliseconds) (Maximum time to wait for a page to load)</label>
+                <input type="number" id="timeout" name="timeout" min="1000" max="120000" value="60000" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+            </div>
+            <div class="mb-4">
+                <label for="retries" class="block text-sm font-medium text-gray-700">Number of Retries (Number of attempts to load a page if it fails)</label>
+                <input type="number" id="retries" name="retries" min="1" max="10" value="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+            </div>
+            <button type="submit" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                Search
+            </button>
+        </form>
+        <div id="loading" class="hidden">
+            <p class="text-center">Loading...</p>
+        </div>
+        <div id="log" class="mb-4 p-4 bg-gray-200 rounded-md max-h-40 overflow-y-auto"></div>
+        <div id="searchResults" class="space-y-4"></div>
+    </div>
+    <script>
+        let allResults = [];
+
+        document.getElementById('searchForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const searchTerm = document.getElementById('searchTerm').value;
+            const limitResults = document.getElementById('limitResults').value;
+            const minDelay = document.getElementById('minDelay').value;
+            const maxDelay = document.getElementById('maxDelay').value;
+            const timeout = document.getElementById('timeout').value;
+            const retries = document.getElementById('retries').value;
+            const searchResultsContainer = document.getElementById('searchResults');
+            const loadingElement = document.getElementById('loading');
+            const logElement = document.getElementById('log');
+
+            logElement.innerHTML = '';
+            loadingElement.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/extract-google-links-and-emails', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        query: searchTerm, 
+                        limit: parseInt(limitResults),
+                        minDelay: parseInt(minDelay),
+                        maxDelay: parseInt(maxDelay),
+                        timeout: parseInt(timeout),
+                        retries: parseInt(retries)
+                    }),
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                let currentResults = [];
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.done) {
+                                loadingElement.classList.add('hidden');
+                                // Results add
+                                allResults.unshift({
+                                    searchTerm,
+                                    results: currentResults
+                                });
+                                //UI
+                                updateSearchResultsUI();
+                            } else if (data.result) {
+                                currentResults.push(data.result);
+                            } else if (data.message || data.error) {
+                                const logMessage = document.createElement('p');
+                                logMessage.textContent = data.message || data.error;
+                                logMessage.className = data.error ? 'text-red-500' : 'text-gray-700';
+                                logElement.appendChild(logMessage);
+                                logElement.scrollTop = logElement.scrollHeight;
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                searchResultsContainer.innerHTML = `<p class="text-red-500">An error occurred: ${error.message}</p>`;
+            } finally {
+                loadingElement.classList.add('hidden');
+            }
+        });
+
+        function updateSearchResultsUI() {
+            const searchResultsContainer = document.getElementById('searchResults');
+            searchResultsContainer.innerHTML = '';
+            
+            allResults.forEach((searchResult, index) => {
+                const searchResultElement = createSearchResultElement(searchResult, index);
+                searchResultsContainer.appendChild(searchResultElement);
+            });
+        }
+
+        function createSearchResultElement(searchResult, index) {
+            const searchResultElement = document.createElement('div');
+            searchResultElement.className = 'bg-white p-4 rounded shadow mb-4';
+            
+            // Group results by query
+            const resultsByQuery = searchResult.results.reduce((acc, result) => {
+                if (!acc[result.query]) {
+                    acc[result.query] = [];
+                }
+                acc[result.query].push(result);
+                return acc;
+            }, {});
+
+            searchResultElement.innerHTML = `
+                <h2 class="text-xl font-semibold mb-4">${searchResult.searchTerm}</h2>
+                ${Object.entries(resultsByQuery).map(([query, results], queryIndex) => `
+                    <div class="mb-6">
+                        <div class="flex justify-between items-center cursor-pointer" onclick="toggleQueryVisibility(${index}, ${queryIndex})">
+                            <h3 class="text-lg font-semibold">Results for: "${query}"</h3>
+                            <span id="toggleIcon${index}-${queryIndex}">▼</span>
+                        </div>
+                        <div id="queryContent${index}-${queryIndex}" class="mt-4 hidden">
+                            ${results.map(result => `
+                                <div class="mb-4 border-b pb-4">
+                                    <h4 class="text-md font-semibold mb-2">${result.rank}. ${result.text}</h4>
+                                    <a href="${result.url}" target="_blank" class="text-blue-600 hover:underline">${result.url}</a>
+                                    <h5 class="font-semibold mt-2">Emails:</h5>
+                                    <ul class="list-disc pl-5">
+                                        ${result.emails.map(email => `<li>${email}</li>`).join('')}
+                                    </ul>
+                                    <h5 class="font-semibold mt-2">Phone Numbers:</h5>
+                                    <ul class="list-disc pl-5">
+                                        ${result.phoneNumbers.map(phone => `<li>${phone}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+            return searchResultElement;
+        }
+
+        function toggleQueryVisibility(index, queryIndex) {
+            const content = document.getElementById(`queryContent${index}-${queryIndex}`);
+            const icon = document.getElementById(`toggleIcon${index}-${queryIndex}`);
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                icon.textContent = '▲';
+            } else {
+                content.classList.add('hidden');
+                icon.textContent = '▼';
+            }
+        }
+    </script>
+</body>
+</html>
