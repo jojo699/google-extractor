@@ -25,4 +25,4 @@ Visits each result
 
 Collects numbers and emails from results
 
-Brngs back extracted data
+Brings back extracted data
