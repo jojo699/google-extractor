@@ -20,6 +20,9 @@ SETTINGS:
 USAGE:
 
 Searches Google results
+
 Visits each result
+
 Collects numbers and emails from results
+
 Brngs back extracted data
