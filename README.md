@@ -1,6 +1,7 @@
 INSTALL:
 
 npm run dev // starts server
+
 http:// localhost:3001 // navigate to index.html
 
 
