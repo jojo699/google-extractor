@@ -5,7 +5,7 @@ npm run dev // starts server
 http:// localhost:3001 // navigate to index.html
 
 
-USAGE:
+SETTINGS:
 - Google Search Terms (separate multiple queries with semicolons)
 - Limit Output Responses (Maximum number of results to return from Google Search)
 
@@ -17,3 +17,9 @@ USAGE:
 
 - Click 'search'
 
+USAGE:
+
+Searches Google results
+Visits each result
+Collects numbers and emails from results
+Brngs back extracted data
